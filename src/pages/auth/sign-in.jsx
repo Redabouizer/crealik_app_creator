@@ -1,0 +1,315 @@
+"use client"
+
+import { useEffect, useState, useCallback } from "react"
+import { Link, useNavigate } from "react-router-dom"
+import Swal from "sweetalert2"
+import withReactContent from "sweetalert2-react-content"
+import { Input, Checkbox, Button, Typography } from "@material-tailwind/react"
+import { loginWithEmailAndPassword, signInWithGoogle } from "../../firebase/auth"
+import { auth } from "../../firebase/config"
+import { onAuthStateChanged } from "firebase/auth"
+
+export function SignIn() {
+  const navigate = useNavigate()
+  const MySwal = withReactContent(Swal)
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Check for existing user once on component mount
+  useEffect(() => {
+    document.title = "Sign In"
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        navigate("/home", { replace: true })
+      }
+    })
+
+    return () => unsubscribe()
+  }, [navigate])
+
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  })
+
+  const [formErrors, setFormErrors] = useState({
+    email: "",
+    password: "",
+  })
+
+  // Memoized validation function
+  const validateForm = useCallback(() => {
+    const errors = {}
+    let formIsValid = true
+
+    if (!formData.email) {
+      formIsValid = false
+      errors.email = "Email is required"
+    }
+
+    if (!formData.password) {
+      formIsValid = false
+      errors.password = "Password is required"
+    }
+
+    setFormErrors(errors)
+    return formIsValid
+  }, [formData])
+
+  // Optimized input handler
+  const handleInputChange = useCallback(
+    (event) => {
+      const { name, value } = event.target
+      setFormData((prev) => ({ ...prev, [name]: value }))
+
+      // Clear error when user types
+      if (formErrors[name]) {
+        setFormErrors((prev) => ({ ...prev, [name]: "" }))
+      }
+    },
+    [formErrors],
+  )
+
+  // Handle Google Sign In
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true)
+    try {
+      const { user, error, isNewUser } = await signInWithGoogle()
+
+      if (error) {
+        throw error
+      }
+
+      if (user) {
+        await MySwal.fire({
+          title: "Success!",
+          text: "Signed in successfully with Google",
+          icon: "success",
+          timer: 1500,
+          showConfirmButton: false,
+        })
+
+        // If new user or profile not complete, redirect to complete profile page
+        if (isNewUser) {
+          navigate("/complete-profile", { replace: true })
+        } else {
+          navigate("/home", { replace: true })
+        }
+      }
+    } catch (error) {
+      MySwal.fire({
+        title: "Failed!",
+        text: error.message || "Google sign-in failed. Please try again.",
+        icon: "error",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Optimized login handler
+  const loginHandler = useCallback(
+    async (e) => {
+      e.preventDefault()
+      setIsLoading(true)
+
+      if (!validateForm()) {
+        setIsLoading(false)
+        return
+      }
+
+      try {
+        const { user, error, isNewUser } = await loginWithEmailAndPassword(formData.email, formData.password)
+
+        if (error) {
+          throw error
+        }
+
+        if (user) {
+          await MySwal.fire({
+            title: "Success!",
+            text: "Login successful",
+            icon: "success",
+            timer: 1500,
+            showConfirmButton: false,
+          })
+
+          // If profile not complete, redirect to complete profile page
+          if (isNewUser) {
+            navigate("/complete-profile", { replace: true })
+          } else {
+            navigate("/home", { replace: true })
+          }
+        }
+      } catch (error) {
+        let errorMessage = "Login failed. Please check your credentials."
+
+        if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password") {
+          errorMessage = "Invalid email or password"
+        } else if (error.code === "auth/too-many-requests") {
+          errorMessage = "Too many failed login attempts. Please try again later."
+        } else if (error.message) {
+          errorMessage = error.message
+        }
+
+        MySwal.fire({
+          title: "Failed!",
+          text: errorMessage,
+          icon: "error",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [formData, validateForm, navigate, MySwal],
+  )
+
+  return (
+    <section className="m-8 flex gap-4">
+      <div className="w-full lg:w-3/5 mt-24">
+        <div className="text-center">
+          <Typography variant="h2" className="font-bold mb-4">
+            Sign In
+          </Typography>
+          <Typography variant="paragraph" color="blue-gray" className="text-lg font-normal">
+            Enter your email and password to Sign In.
+          </Typography>
+        </div>
+        <form onSubmit={loginHandler} className="mt-8 mb-2 mx-auto w-80 max-w-screen-lg lg:w-1/2">
+          <div className="mb-1 flex flex-col gap-6">
+            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
+              Your email
+            </Typography>
+            <Input
+              name="email"
+              size="lg"
+              placeholder="name@mail.com"
+              className=" !border-t-blue-gray-200 focus:!border-t-gray-900"
+              labelProps={{
+                className: "before:content-none after:content-none",
+              }}
+              value={formData.email}
+              onChange={handleInputChange}
+              error={!!formErrors.email}
+            />
+            {formErrors.email && (
+              <Typography variant="small" color="red" className="-mt-3 font-medium">
+                {formErrors.email}
+              </Typography>
+            )}
+
+            <Typography variant="small" color="blue-gray" className="-mb-3 font-medium">
+              Password
+            </Typography>
+            <Input
+              name="password"
+              type="password"
+              size="lg"
+              placeholder="********"
+              className=" !border-t-blue-gray-200 focus:!border-t-gray-900"
+              labelProps={{
+                className: "before:content-none after:content-none",
+              }}
+              value={formData.password}
+              onChange={handleInputChange}
+              error={!!formErrors.password}
+            />
+            {formErrors.password && (
+              <Typography variant="small" color="red" className="-mt-3 font-medium">
+                {formErrors.password}
+              </Typography>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-2 mt-6">
+            <Checkbox
+              label={
+                <Typography variant="small" color="gray" className="flex items-center justify-start font-medium">
+                  Remember me
+                </Typography>
+              }
+              containerProps={{ className: "-ml-2.5" }}
+            />
+            <Typography variant="small" className="font-medium text-gray-900">
+              <Link to="/auth/forgot-password">Forgot Password</Link>
+            </Typography>
+          </div>
+
+          <Button type="submit" className="mt-6" fullWidth disabled={isLoading}>
+            {isLoading ? "Signing In..." : "Sign In"}
+          </Button>
+
+          <div className="relative flex items-center justify-center gap-2 py-4">
+            <div className="h-px flex-1 bg-gray-300"></div>
+            <Typography variant="small" color="blue-gray" className="font-medium">
+              or
+            </Typography>
+            <div className="h-px flex-1 bg-gray-300"></div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outlined"
+            className="flex items-center gap-2 justify-center"
+            fullWidth
+            onClick={() => navigate("/auth/forgot-password", { state: { isLoginMode: true } })}
+          >
+            Sign in with Email Code
+          </Button>
+
+          <div className="space-y-4 mt-8">
+            <Button
+              type="button"
+              size="lg"
+              color="white"
+              className="flex items-center gap-2 justify-center shadow-md"
+              fullWidth
+              onClick={handleGoogleSignIn}
+              disabled={isLoading}
+            >
+              <svg width="17" height="16" viewBox="0 0 17 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <g clipPath="url(#clip0_1156_824)">
+                  <path
+                    d="M16.3442 8.18429C16.3442 7.64047 16.3001 7.09371 16.206 6.55872H8.66016V9.63937H12.9813C12.802 10.6329 12.2258 11.5119 11.3822 12.0704V14.0693H13.9602C15.4741 12.6759 16.3442 10.6182 16.3442 8.18429Z"
+                    fill="#4285F4"
+                  />
+                  <path
+                    d="M8.65974 16.0006C10.8174 16.0006 12.637 15.2922 13.9627 14.0693L11.3847 12.0704C10.6675 12.5584 9.7415 12.8347 8.66268 12.8347C6.5756 12.8347 4.80598 11.4266 4.17104 9.53357H1.51074V11.5942C2.86882 14.2956 5.63494 16.0006 8.65974 16.0006Z"
+                    fill="#34A853"
+                  />
+                  <path
+                    d="M4.16852 9.53356C3.83341 8.53999 3.83341 7.46411 4.16852 6.47054V4.40991H1.51116C0.376489 6.67043 0.376489 9.33367 1.51116 11.5942L4.16852 9.53356Z"
+                    fill="#FBBC04"
+                  />
+                  <path
+                    d="M8.65974 3.16644C9.80029 3.1488 10.9026 3.57798 11.7286 4.36578L14.0127 2.08174C12.5664 0.72367 10.6469 -0.0229773 8.65974 0.000539111C5.63494 0.000539111 2.86882 1.70548 1.51074 4.40987L4.1681 6.4705C4.8001 4.57449 6.57266 3.16644 8.65974 3.16644Z"
+                    fill="#EA4335"
+                  />
+                </g>
+                <defs>
+                  <clipPath id="clip0_1156_824">
+                    <rect width="16" height="16" fill="white" transform="translate(0.5)" />
+                  </clipPath>
+                </defs>
+              </svg>
+              <span>Sign in With Google</span>
+            </Button>
+          </div>
+
+          <Typography variant="paragraph" className="text-center text-blue-gray-500 font-medium mt-4">
+            Not registered?
+            <Link to="/auth/sign-up" className="text-gray-900 ml-1">
+              Create account
+            </Link>
+          </Typography>
+        </form>
+      </div>
+
+      <div className="w-2/5 h-full hidden lg:block">
+        <img src="/img/pattern.png" className="h-full w-full object-cover rounded-3xl" alt="Decorative background" />
+      </div>
+    </section>
+  )
+}
+
+export default SignIn

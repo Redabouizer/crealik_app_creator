@@ -1,0 +1,5 @@
+export * from "@/pages/auth/sign-in"
+export * from "@/pages/auth/sign-up"
+export * from "@/pages/auth/forgot-password"
+export * from "@/pages/auth/verify-code"
+export * from "@/pages/auth/complete-profile"

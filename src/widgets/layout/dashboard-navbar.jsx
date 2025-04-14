@@ -1,0 +1,241 @@
+"use client"
+
+import { useLocation, Link, useNavigate } from "react-router-dom"
+import { useEffect, useState } from "react"
+import axios from "axios" // Added missing axios import
+import {
+  Navbar,
+  Typography,
+  Button,
+  IconButton,
+  Breadcrumbs,
+  Input,
+  Menu,
+  MenuHandler,
+  MenuList,
+  MenuItem,
+  Avatar,
+} from "@material-tailwind/react"
+import {
+  UserCircleIcon,
+  Cog6ToothIcon,
+  BellIcon,
+  ClockIcon,
+  CreditCardIcon,
+  Bars3Icon,
+} from "@heroicons/react/24/solid"
+import { useMaterialTailwindController, setOpenConfigurator, setOpenSidenav } from "@/context"
+import { auth } from "../../firebase/config" // Import Firebase auth
+import { signOut } from "firebase/auth" // Import Firebase signOut method
+
+export function DashboardNavbar() {
+  const [controller, dispatch] = useMaterialTailwindController()
+  const { fixedNavbar, openSidenav } = controller
+  const { pathname } = useLocation()
+  const [layout, page] = pathname.split("/").filter((el) => el !== "")
+  const [user, setUser] = useState({})
+
+  const navigate = useNavigate()
+
+  // Get token from localStorage for API requests
+  const token = localStorage.getItem("token")
+  const baseURL = "http://127.0.0.1:8000/api"
+
+  useEffect(() => {
+    document.title = "Dashboard"
+    // Check if user is authenticated
+    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+      if (!currentUser) {
+        navigate("/auth/sign-in")
+      } else {
+        // If we have a token, also fetch user data from API
+        if (token) {
+          fetchData()
+        }
+      }
+    })
+
+    return () => unsubscribe() // Clean up the listener
+  }, [navigate])
+
+  const fetchData = async () => {
+    try {
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`
+      const response = await axios.get(`${baseURL}/user`)
+      setUser(response.data)
+    } catch (error) {
+      console.error("Error fetching user data:", error)
+    }
+  }
+
+  const logoutHandler = async () => {
+    console.log("Logout initiated") // Debugging line
+
+    try {
+      // 1. Sign out from Firebase
+      await signOut(auth)
+      console.log("Firebase logout successful")
+
+      // 2. Get token safely for API logout
+      const token = localStorage.getItem("token")
+      console.log("Current token:", token) // Debugging
+
+      // 3. Clear client-side storage
+      localStorage.removeItem("token")
+      localStorage.removeItem("userData")
+      delete axios.defaults.headers.common["Authorization"]
+
+      // 4. Try API logout (but don't block if it fails)
+      try {
+        if (token) {
+          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`
+          await axios.post(`${baseURL}/logout`)
+          console.log("API logout successful")
+        }
+      } catch (apiError) {
+        console.error("API logout failed (but continuing)", apiError)
+      }
+
+      // 5. Navigate to sign-in page
+      console.log("Redirecting to login...")
+      navigate("/auth/sign-in")
+    } catch (error) {
+      console.error("Unexpected logout error:", error)
+      // Nuclear option - clear everything and reload
+      localStorage.clear()
+      window.location.href = "/auth/sign-in"
+    }
+  }
+
+  return (
+    <Navbar
+      color={fixedNavbar ? "white" : "transparent"}
+      className={`rounded-xl transition-all ${
+        fixedNavbar ? "sticky top-4 z-40 py-3 shadow-md shadow-blue-gray-500/5" : "px-0 py-1"
+      }`}
+      fullWidth
+      blurred={fixedNavbar}
+    >
+      <div className="flex flex-col-reverse justify-between gap-6 md:flex-row md:items-center">
+        <div className="capitalize">
+          <Breadcrumbs className={`bg-transparent p-0 transition-all ${fixedNavbar ? "mt-1" : ""}`}>
+            <Link to={`/${layout}`}>
+              <Typography
+                variant="small"
+                color="blue-gray"
+                className="font-normal opacity-50 transition-all hover:text-blue-500 hover:opacity-100"
+              >
+                {layout}
+              </Typography>
+            </Link>
+            <Typography variant="small" color="blue-gray" className="font-normal">
+              {page}
+            </Typography>
+          </Breadcrumbs>
+          <Typography variant="h6" color="blue-gray">
+            {page}
+          </Typography>
+        </div>
+        <div className="flex items-center">
+          <div className="mr-auto md:mr-4 md:w-56">
+            <Input label="Search" />
+          </div>
+          <IconButton
+            variant="text"
+            color="blue-gray"
+            className="grid xl:hidden"
+            onClick={() => setOpenSidenav(dispatch, !openSidenav)}
+          >
+            <Bars3Icon strokeWidth={3} className="h-6 w-6 text-blue-gray-500" />
+          </IconButton>
+          <Button
+            variant="text"
+            color="blue-gray"
+            className="hidden items-center gap-1 px-4 xl:flex normal-case"
+            onClick={logoutHandler}
+          >
+            <UserCircleIcon className="h-5 w-5 text-blue-gray-500" />
+            Sign Out
+          </Button>
+
+          <IconButton variant="text" color="blue-gray" className="grid xl:hidden" onClick={logoutHandler}>
+            <UserCircleIcon className="h-5 w-5 text-blue-gray-500" />
+          </IconButton>
+          <Menu>
+            <MenuHandler>
+              <IconButton variant="text" color="blue-gray">
+                <BellIcon className="h-5 w-5 text-blue-gray-500" />
+              </IconButton>
+            </MenuHandler>
+            <MenuList className="w-max border-0">
+              <MenuItem className="flex items-center gap-3">
+                <Avatar
+                  src="https://demos.creative-tim.com/material-dashboard/assets/img/team-2.jpg"
+                  alt="item-1"
+                  size="sm"
+                  variant="circular"
+                />
+                <div>
+                  <Typography variant="small" color="blue-gray" className="mb-1 font-normal">
+                    <strong>New message</strong> from Laur
+                  </Typography>
+                  <Typography
+                    variant="small"
+                    color="blue-gray"
+                    className="flex items-center gap-1 text-xs font-normal opacity-60"
+                  >
+                    <ClockIcon className="h-3.5 w-3.5" /> 13 minutes ago
+                  </Typography>
+                </div>
+              </MenuItem>
+              <MenuItem className="flex items-center gap-4">
+                <Avatar
+                  src="https://demos.creative-tim.com/material-dashboard/assets/img/small-logos/logo-spotify.svg"
+                  alt="item-1"
+                  size="sm"
+                  variant="circular"
+                />
+                <div>
+                  <Typography variant="small" color="blue-gray" className="mb-1 font-normal">
+                    <strong>New album</strong> by Travis Scott
+                  </Typography>
+                  <Typography
+                    variant="small"
+                    color="blue-gray"
+                    className="flex items-center gap-1 text-xs font-normal opacity-60"
+                  >
+                    <ClockIcon className="h-3.5 w-3.5" /> 1 day ago
+                  </Typography>
+                </div>
+              </MenuItem>
+              <MenuItem className="flex items-center gap-4">
+                <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-tr from-blue-gray-800 to-blue-gray-900">
+                  <CreditCardIcon className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <Typography variant="small" color="blue-gray" className="mb-1 font-normal">
+                    Payment successfully completed
+                  </Typography>
+                  <Typography
+                    variant="small"
+                    color="blue-gray"
+                    className="flex items-center gap-1 text-xs font-normal opacity-60"
+                  >
+                    <ClockIcon className="h-3.5 w-3.5" /> 2 days ago
+                  </Typography>
+                </div>
+              </MenuItem>
+            </MenuList>
+          </Menu>
+          <IconButton variant="text" color="blue-gray" onClick={() => setOpenConfigurator(dispatch, true)}>
+            <Cog6ToothIcon className="h-5 w-5 text-blue-gray-500" />
+          </IconButton>
+        </div>
+      </div>
+    </Navbar>
+  )
+}
+
+DashboardNavbar.displayName = "/src/widgets/layout/dashboard-navbar.jsx"
+
+export default DashboardNavbar
