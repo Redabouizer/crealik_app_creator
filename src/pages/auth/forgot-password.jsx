@@ -1,30 +1,20 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
-import { Link, useNavigate, useLocation } from "react-router-dom"
+import { useState, useCallback } from "react"
+import { Link, useNavigate } from "react-router-dom"
 import Swal from "sweetalert2"
 import withReactContent from "sweetalert2-react-content"
 import { Input, Button, Typography } from "@material-tailwind/react"
-import { sendVerificationCode, sendLoginVerificationCode } from "../../firebase/auth"
+import { sendPasswordResetEmail } from "firebase/auth"
+import { auth } from "../../firebase/config"
+import { getUserByEmail } from "../../firebase/firestore"
 
 export function ForgotPassword() {
   const MySwal = withReactContent(Swal)
   const navigate = useNavigate()
-  const location = useLocation()
-  const [isLoginMode, setIsLoginMode] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [email, setEmail] = useState("")
   const [emailError, setEmailError] = useState("")
-
-  useEffect(() => {
-    // Check if we're in login mode from the location state
-    if (location.state?.isLoginMode) {
-      setIsLoginMode(true)
-      document.title = "Sign In with Email Code"
-    } else {
-      document.title = "Forgot Password"
-    }
-  }, [location.state])
 
   // Validate email
   const validateEmail = useCallback(() => {
@@ -50,6 +40,17 @@ export function ForgotPassword() {
     [emailError],
   )
 
+  // Verify email exists in database
+  const verifyEmailExists = useCallback(async () => {
+    try {
+      const { success, data } = await getUserByEmail(email)
+      return success && data
+    } catch (error) {
+      console.error("Error verifying email:", error)
+      return false
+    }
+  }, [email])
+
   // Handle form submission
   const handleSubmit = useCallback(
     async (e) => {
@@ -61,37 +62,32 @@ export function ForgotPassword() {
         return
       }
 
+      // Check if email exists in database
+      const emailExists = await verifyEmailExists()
+      if (!emailExists) {
+        MySwal.fire({
+          title: "Email Not Found",
+          text: "This email address is not registered in our system.",
+          icon: "error",
+        })
+        setIsSubmitting(false)
+        return
+      }
+
       try {
-        // Use different function based on mode
-        const { success, error } = isLoginMode
-          ? await sendLoginVerificationCode(email)
-          : await sendVerificationCode(email)
+        // Send password reset email using Firebase
+        await sendPasswordResetEmail(auth, email)
 
-        if (error) {
-          throw error
-        }
+        await MySwal.fire({
+          title: "Reset Link Sent!",
+          text: "A password reset link has been sent to your email. Please check your inbox and follow the instructions to reset your password.",
+          icon: "success",
+        })
 
-        if (success) {
-          await MySwal.fire({
-            title: "Code Sent!",
-            text: "A verification code has been sent to your email",
-            icon: "success",
-            timer: 3000,
-            showConfirmButton: false,
-          })
-
-          // Navigate to verification code page with email and mode
-          navigate("/auth/verify-code", {
-            state: {
-              email,
-              isLoginMode,
-            },
-          })
-        }
+        // Navigate back to sign in page
+        navigate("/auth/sign-in")
       } catch (error) {
-        let errorMessage = isLoginMode
-          ? "Failed to send login code. Please try again."
-          : "Failed to send verification code. Please try again."
+        let errorMessage = "Failed to send password reset link. Please try again."
 
         if (error.code === "auth/user-not-found") {
           errorMessage = "No user found with this email address."
@@ -108,7 +104,7 @@ export function ForgotPassword() {
         setIsSubmitting(false)
       }
     },
-    [email, validateEmail, MySwal, navigate, isLoginMode],
+    [email, validateEmail, verifyEmailExists, MySwal, navigate],
   )
 
   return (
@@ -120,12 +116,10 @@ export function ForgotPassword() {
       <div className="w-full lg:w-3/5 flex flex-col items-center justify-center">
         <div className="text-center">
           <Typography variant="h2" className="font-bold mb-4">
-            {isLoginMode ? "Sign In with Email Code" : "Forgot Password"}
+            Forgot Password
           </Typography>
           <Typography variant="paragraph" color="blue-gray" className="text-lg font-normal">
-            {isLoginMode
-              ? "Enter your email and we'll send you a verification code to sign in"
-              : "Enter your email and we'll send you a verification code"}
+            Enter your email and we'll send you a link to reset your password
           </Typography>
         </div>
 
@@ -151,7 +145,7 @@ export function ForgotPassword() {
           </div>
 
           <Button type="submit" className="mt-6" fullWidth disabled={isSubmitting}>
-            {isSubmitting ? "Sending..." : "Send Verification Code"}
+            {isSubmitting ? "Sending..." : "Send Reset Link"}
           </Button>
 
           <Typography variant="paragraph" className="text-center text-blue-gray-500 font-medium mt-4">

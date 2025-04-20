@@ -247,16 +247,6 @@ export function SignIn() {
             <div className="h-px flex-1 bg-gray-300"></div>
           </div>
 
-          <Button
-            type="button"
-            variant="outlined"
-            className="flex items-center gap-2 justify-center"
-            fullWidth
-            onClick={() => navigate("/auth/forgot-password", { state: { isLoginMode: true } })}
-          >
-            Sign in with Email Code
-          </Button>
-
           <div className="space-y-4 mt-8">
             <Button
               type="button"

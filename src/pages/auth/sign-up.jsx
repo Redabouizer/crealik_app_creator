@@ -5,7 +5,7 @@ import { Link, useNavigate } from "react-router-dom"
 import Swal from "sweetalert2"
 import withReactContent from "sweetalert2-react-content"
 import { Input, Checkbox, Button, Typography } from "@material-tailwind/react"
-import { registerWithEmailAndPassword, signInWithGoogle } from "../../firebase/auth"
+import { registerWithEmailAndPassword, signInWithGoogle, checkPasswordStrength } from "../../firebase/auth"
 import { auth } from "../../firebase/config"
 import { onAuthStateChanged } from "firebase/auth"
 
@@ -64,9 +64,23 @@ export function SignUp() {
     if (!formData.password) {
       formIsValid = false
       errors.password = "Password is required"
-    } else if (formData.password.length < 8) {
-      formIsValid = false
-      errors.password = "Password must be at least 8 characters"
+    } else {
+      // Use the new password strength checker
+      const { strength, feedback } = checkPasswordStrength(formData.password)
+
+      if (strength === "weak") {
+        formIsValid = false
+        errors.password = feedback.join(". ")
+      } else if (strength === "medium") {
+        // Allow medium strength but show a warning
+        MySwal.fire({
+          title: "Password Security",
+          text: "Your password is moderately secure. Consider adding more complexity.",
+          icon: "warning",
+          timer: 3000,
+          showConfirmButton: false,
+        })
+      }
     }
 
     if (!formData.password_confirmation) {

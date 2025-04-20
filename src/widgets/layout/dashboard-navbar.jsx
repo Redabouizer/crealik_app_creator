@@ -39,7 +39,6 @@ export function DashboardNavbar() {
 
   // Get token from localStorage for API requests
   const token = localStorage.getItem("token")
-  const baseURL = "http://127.0.0.1:8000/api"
 
   useEffect(() => {
     document.title = "Dashboard"
@@ -61,48 +60,36 @@ export function DashboardNavbar() {
   const fetchData = async () => {
     try {
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`
-      const response = await axios.get(`${baseURL}/user`)
-      setUser(response.data)
+      const response = setUser(response.data)
     } catch (error) {
       console.error("Error fetching user data:", error)
     }
   }
 
+  // Improve the logout handler to ensure proper cleanup and prevent page refresh
+
+  // Replace the existing logoutHandler function with this improved version:
   const logoutHandler = async () => {
-    console.log("Logout initiated") // Debugging line
-
     try {
-      // 1. Sign out from Firebase
-      await signOut(auth)
-      console.log("Firebase logout successful")
-
-      // 2. Get token safely for API logout
+      // 1. Get token before signing out
       const token = localStorage.getItem("token")
-      console.log("Current token:", token) // Debugging
+
+      // 2. Sign out from Firebase
+      await signOut(auth)
 
       // 3. Clear client-side storage
       localStorage.removeItem("token")
       localStorage.removeItem("userData")
+      sessionStorage.clear()
+
+      // 4. Clear authorization headers
       delete axios.defaults.headers.common["Authorization"]
 
-      // 4. Try API logout (but don't block if it fails)
-      try {
-        if (token) {
-          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`
-          await axios.post(`${baseURL}/logout`)
-          console.log("API logout successful")
-        }
-      } catch (apiError) {
-        console.error("API logout failed (but continuing)", apiError)
-      }
-
-      // 5. Navigate to sign-in page
-      console.log("Redirecting to login...")
-      navigate("/auth/sign-in")
+      // 5. Navigate to sign-in page using React Router (prevents full page refresh)
+      navigate("/auth/sign-in", { replace: true })
     } catch (error) {
-      console.error("Unexpected logout error:", error)
-      // Nuclear option - clear everything and reload
-      localStorage.clear()
+      console.error("Logout error:", error)
+      // Fallback - if there's an error, force redirect
       window.location.href = "/auth/sign-in"
     }
   }

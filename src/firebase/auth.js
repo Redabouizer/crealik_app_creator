@@ -3,11 +3,13 @@ import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
-  sendPasswordResetEmail,
   updateProfile,
 } from "firebase/auth"
 import { auth } from "./config"
-import { saveUserData, getUserData, isProfileComplete, saveVerificationCode, verifyCode } from "./firestore"
+import { saveUserData, getUserData, isProfileComplete } from "./firestore"
+
+// Track login attempts for rate limiting
+const loginAttempts = {}
 
 // Provider for Google Authentication
 const googleProvider = new GoogleAuthProvider()
@@ -55,18 +57,72 @@ export const registerWithEmailAndPassword = async (name, email, password) => {
 }
 
 /**
- * Sign in with email and password
+ * Sign in with email and password with enhanced security
  * @param {string} email - User's email
  * @param {string} password - User's password
  * @returns {Promise<object>} - Result with user or error
  */
 export const loginWithEmailAndPassword = async (email, password) => {
   try {
+    // Implement basic rate limiting
+    const userIP = "client-ip" // In a real app, you'd get this from the request
+    const key = `${email}:${userIP}`
+
+    if (!loginAttempts[key]) {
+      loginAttempts[key] = {
+        count: 0,
+        timestamp: Date.now(),
+      }
+    }
+
+    const attempt = loginAttempts[key]
+
+    // Reset attempts after 15 minutes
+    if (Date.now() - attempt.timestamp > 15 * 60 * 1000) {
+      attempt.count = 0
+      attempt.timestamp = Date.now()
+    }
+
+    // Check if too many attempts
+    if (attempt.count >= 5) {
+      return {
+        error: {
+          code: "auth/too-many-requests",
+          message: "Too many failed login attempts. Please try again later.",
+        },
+      }
+    }
+
+    // Increment attempt counter
+    attempt.count++
+
+    // Attempt to sign in
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
     const user = userCredential.user
 
+    // Reset attempts on successful login
+    if (loginAttempts[key]) {
+      loginAttempts[key].count = 0
+    }
+
     // Check if profile is complete
     const profileComplete = await isProfileComplete(user.uid)
+
+    // Get the token and store it securely
+    const token = await user.getIdToken()
+
+    // Store auth data securely
+    // Use sessionStorage instead of localStorage for better security
+    sessionStorage.setItem("token", token)
+    sessionStorage.setItem("authTime", Date.now().toString())
+
+    // Store minimal user data
+    const userData = {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+    }
+    sessionStorage.setItem("userData", JSON.stringify(userData))
 
     return { user, isNewUser: !profileComplete }
   } catch (error) {
@@ -111,45 +167,27 @@ export const signInWithGoogle = async () => {
       return { user, isNewUser: true }
     }
 
+    // Get the token and store it securely
+    const token = await user.getIdToken()
+
+    // Store auth data securely
+    sessionStorage.setItem("token", token)
+    sessionStorage.setItem("authTime", Date.now().toString())
+
+    // Store minimal user data
+    const userData = {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+    }
+    sessionStorage.setItem("userData", JSON.stringify(userData))
+
     return { user, isNewUser }
   } catch (error) {
     return { error }
   }
 }
-
-/**
- * Update user profile
- * @param {string} userId - User's ID
- * @param {object} profileData - Profile data to update
- * @returns {Promise<object>} - Result of the operation
- */
-export const updateUserProfile = async (userId, profileData) => {
-  try {
-    // Mark profile as complete
-    const updatedData = {
-      ...profileData,
-      profileComplete: true,
-    }
-
-    const result = await saveUserData(userId, updatedData)
-
-    // Update displayName in Firebase Auth if provided
-    if (profileData.displayName) {
-      const user = auth.currentUser
-      if (user) {
-        await updateProfile(user, {
-          displayName: profileData.displayName,
-        })
-      }
-    }
-
-    return result
-  } catch (error) {
-    console.error("Error updating profile:", error)
-    return { success: false, error }
-  }
-}
-
 /**
  * Generate a random verification code
  * @returns {string} - 6-digit verification code
@@ -294,7 +332,7 @@ export const verifyCodeAndSignIn = async (email, code) => {
  */
 export const sendVerificationCode = async (email) => {
   try {
-    // Generate a verification code
+    // Generate a verification code (6 digits)
     const verificationCode = generateVerificationCode()
 
     // Store the verification code in Firestore with expiration time (15 minutes)
@@ -341,9 +379,6 @@ export const verifyCodeAndResetPassword = async (email, code, newPassword) => {
       return { error: error || { message: "Invalid or expired verification code" } }
     }
 
-    // In a real implementation, you would use Firebase Admin SDK or a custom backend
-    // to reset the password directly. For this example, we'll simulate success.
-
     try {
       // Check if user exists with this email
       const { fetchSignInMethodsForEmail } = await import("firebase/auth")
@@ -351,24 +386,119 @@ export const verifyCodeAndResetPassword = async (email, code, newPassword) => {
 
       if (methods && methods.length > 0) {
         // User exists, we would reset their password here
-        // For now, we'll simulate success
-        console.log(`Password would be reset for ${email} to: ${newPassword}`)
+        // For Firebase, we need to sign in the user first to change their password
+        // In a real implementation with Firebase Admin SDK, you could do this directly
+
+        // Get the user data from Firestore
+        const { data: userData } = await getUserByEmail(email)
+
+        if (userData) {
+          // In a real implementation, you would use Firebase Admin SDK
+          // For this example, we'll simulate a successful password reset
+          console.log(`Password reset for ${email} to: ${newPassword}`)
+
+          return {
+            success: true,
+            message: "Password has been reset successfully. You can now login with your new password.",
+          }
+        }
       } else {
         return { error: { message: "No user found with this email address." } }
       }
     } catch (authError) {
       console.error("Auth error:", authError)
-      // Even if there's an auth error, we'll simulate success for testing
-    }
-
-    // Simulate successful password reset
-    return {
-      success: true,
-      message: "Password has been reset successfully. You can now login with your new password.",
+      return { error: authError }
     }
   } catch (error) {
     console.error("Error verifying code:", error)
     return { error }
+  }
+}
+
+
+/**
+ * Validate user session
+ * @returns {boolean} - Whether the session is valid
+ */
+export const validateSession = () => {
+  try {
+    const authTime = sessionStorage.getItem("authTime")
+    if (!authTime) return false
+
+    // Session expires after 2 hours of inactivity
+    const SESSION_TIMEOUT = 2 * 60 * 60 * 1000 // 2 hours in milliseconds
+    const isValid = Date.now() - Number.parseInt(authTime) < SESSION_TIMEOUT
+
+    if (isValid) {
+      // Update auth time on valid session check
+      sessionStorage.setItem("authTime", Date.now().toString())
+    }
+
+    return isValid
+  } catch (error) {
+    console.error("Session validation error:", error)
+    return false
+  }
+}
+
+
+/**
+ * Check password strength
+ * @param {string} password - Password to check
+ * @returns {object} - Password strength assessment
+ */
+export const checkPasswordStrength = (password) => {
+  // Initialize score and feedback
+  let score = 0
+  const feedback = []
+
+  // Check length
+  if (password.length < 8) {
+    feedback.push("Password should be at least 8 characters long")
+  } else {
+    score += 1
+  }
+
+  // Check for uppercase letters
+  if (!/[A-Z]/.test(password)) {
+    feedback.push("Add uppercase letters")
+  } else {
+    score += 1
+  }
+
+  // Check for lowercase letters
+  if (!/[a-z]/.test(password)) {
+    feedback.push("Add lowercase letters")
+  } else {
+    score += 1
+  }
+
+  // Check for numbers
+  if (!/[0-9]/.test(password)) {
+    feedback.push("Add numbers")
+  } else {
+    score += 1
+  }
+
+  // Check for special characters
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    feedback.push("Add special characters")
+  } else {
+    score += 1
+  }
+
+  // Determine strength level
+  let strength = "weak"
+  if (score >= 4) {
+    strength = "strong"
+  } else if (score >= 3) {
+    strength = "medium"
+  }
+
+  return {
+    score,
+    strength,
+    feedback,
   }
 }
 
@@ -386,6 +516,10 @@ export const sendPasswordReset = async (email) => {
 export const logout = async () => {
   try {
     await auth.signOut()
+    // Clear session storage instead of localStorage
+    sessionStorage.removeItem("token")
+    sessionStorage.removeItem("userData")
+    sessionStorage.removeItem("authTime")
     return { success: true }
   } catch (error) {
     return { error }
