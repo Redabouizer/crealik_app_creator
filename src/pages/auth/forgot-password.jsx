@@ -7,7 +7,7 @@ import withReactContent from "sweetalert2-react-content"
 import { Input, Button, Typography } from "@material-tailwind/react"
 import { sendPasswordResetEmail } from "firebase/auth"
 import { auth } from "../../firebase/config"
-import { getUserByEmail } from "../../firebase/firestore"
+import { getUserByEmail } from "../../services/firebase-service"
 
 export function ForgotPassword() {
   const MySwal = withReactContent(Swal)

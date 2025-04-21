@@ -4,9 +4,17 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   updateProfile,
+  sendPasswordResetEmail,
 } from "firebase/auth"
 import { auth } from "./config"
-import { saveUserData, getUserData, isProfileComplete } from "./firestore"
+import {
+  saveUserData,
+  getUserData,
+  isProfileComplete,
+  getUserByEmail,
+  saveVerificationCode,
+  verifyCode,
+} from "../services/firebase-service"
 
 // Track login attempts for rate limiting
 const loginAttempts = {}
@@ -188,6 +196,7 @@ export const signInWithGoogle = async () => {
     return { error }
   }
 }
+
 /**
  * Generate a random verification code
  * @returns {string} - 6-digit verification code
@@ -415,7 +424,6 @@ export const verifyCodeAndResetPassword = async (email, code, newPassword) => {
   }
 }
 
-
 /**
  * Validate user session
  * @returns {boolean} - Whether the session is valid
@@ -440,7 +448,6 @@ export const validateSession = () => {
     return false
   }
 }
-
 
 /**
  * Check password strength

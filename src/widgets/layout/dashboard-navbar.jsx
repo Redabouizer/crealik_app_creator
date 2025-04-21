@@ -1,8 +1,7 @@
 "use client"
 
-import { useLocation, Link, useNavigate } from "react-router-dom"
+import { useLocation, Link } from "react-router-dom"
 import { useEffect, useState } from "react"
-import axios from "axios" // Added missing axios import
 import {
   Navbar,
   Typography,
@@ -15,84 +14,55 @@ import {
   MenuList,
   MenuItem,
   Avatar,
+  Badge,
 } from "@material-tailwind/react"
-import {
-  UserCircleIcon,
-  Cog6ToothIcon,
-  BellIcon,
-  ClockIcon,
-  CreditCardIcon,
-  Bars3Icon,
-} from "@heroicons/react/24/solid"
-import { useMaterialTailwindController, setOpenConfigurator, setOpenSidenav } from "@/context"
-import { auth } from "../../firebase/config" // Import Firebase auth
-import { signOut } from "firebase/auth" // Import Firebase signOut method
+import { UserCircleIcon, BellIcon, ClockIcon, Bars3Icon, MagnifyingGlassIcon } from "@heroicons/react/24/solid"
+import { useMaterialTailwindController, setOpenSidenav } from "../../context"
+import { auth } from "../../firebase/config"
+import { signOut } from "firebase/auth"
+import { subscribeToNotifications } from "../../services/firebase-service"
 
-export function DashboardNavbar() {
+export function DashboardNavbar({ user }) {
   const [controller, dispatch] = useMaterialTailwindController()
   const { fixedNavbar, openSidenav } = controller
   const { pathname } = useLocation()
   const [layout, page] = pathname.split("/").filter((el) => el !== "")
-  const [user, setUser] = useState({})
-
-  const navigate = useNavigate()
-
-  // Get token from localStorage for API requests
-  const token = localStorage.getItem("token")
+  const [notifications, setNotifications] = useState([])
+  const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
-    document.title = "Dashboard"
-    // Check if user is authenticated
-    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
-      if (!currentUser) {
-        navigate("/auth/sign-in")
-      } else {
-        // If we have a token, also fetch user data from API
-        if (token) {
-          fetchData()
-        }
-      }
-    })
+    // Set page title
+    document.title = `${page.charAt(0).toUpperCase() + page.slice(1)} | Crealik`
 
-    return () => unsubscribe() // Clean up the listener
-  }, [navigate])
+    // Subscribe to notifications if user is logged in
+    if (user?.uid) {
+      const unsubscribe = subscribeToNotifications(user.uid, (notifs) => {
+        setNotifications(notifs)
+      })
 
-  const fetchData = async () => {
-    try {
-      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`
-      const response = setUser(response.data)
-    } catch (error) {
-      console.error("Error fetching user data:", error)
+      return () => unsubscribe()
     }
-  }
+  }, [page, user])
 
-  // Improve the logout handler to ensure proper cleanup and prevent page refresh
-
-  // Replace the existing logoutHandler function with this improved version:
   const logoutHandler = async () => {
     try {
-      // 1. Get token before signing out
-      const token = localStorage.getItem("token")
-
-      // 2. Sign out from Firebase
       await signOut(auth)
-
-      // 3. Clear client-side storage
       localStorage.removeItem("token")
       localStorage.removeItem("userData")
       sessionStorage.clear()
-
-      // 4. Clear authorization headers
-      delete axios.defaults.headers.common["Authorization"]
-
-      // 5. Navigate to sign-in page using React Router (prevents full page refresh)
-      navigate("/auth/sign-in", { replace: true })
+      window.location.href = "/auth/sign-in"
     } catch (error) {
       console.error("Logout error:", error)
-      // Fallback - if there's an error, force redirect
-      window.location.href = "/auth/sign-in"
     }
   }
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    // Implement search functionality
+    console.log("Searching for:", searchQuery)
+  }
+
+  const unreadNotifications = notifications.filter((n) => !n.read)
 
   return (
     <Navbar
@@ -124,9 +94,21 @@ export function DashboardNavbar() {
           </Typography>
         </div>
         <div className="flex items-center">
-          <div className="mr-auto md:mr-4 md:w-56">
-            <Input label="Search" />
-          </div>
+          <form onSubmit={handleSearch} className="mr-auto md:mr-4 md:w-56">
+            <div className="relative">
+              <MagnifyingGlassIcon className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-gray-500" />
+              <Input
+                type="search"
+                label="Search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-4"
+                containerProps={{
+                  className: "min-w-[100px]",
+                }}
+              />
+            </div>
+          </form>
           <IconButton
             variant="text"
             color="blue-gray"
@@ -135,88 +117,109 @@ export function DashboardNavbar() {
           >
             <Bars3Icon strokeWidth={3} className="h-6 w-6 text-blue-gray-500" />
           </IconButton>
-          <Button
-            variant="text"
-            color="blue-gray"
-            className="hidden items-center gap-1 px-4 xl:flex normal-case"
-            onClick={logoutHandler}
-          >
-            <UserCircleIcon className="h-5 w-5 text-blue-gray-500" />
-            Sign Out
-          </Button>
 
-          <IconButton variant="text" color="blue-gray" className="grid xl:hidden" onClick={logoutHandler}>
-            <UserCircleIcon className="h-5 w-5 text-blue-gray-500" />
-          </IconButton>
           <Menu>
             <MenuHandler>
               <IconButton variant="text" color="blue-gray">
-                <BellIcon className="h-5 w-5 text-blue-gray-500" />
+                <Badge
+                  content={unreadNotifications.length}
+                  withBorder
+                  color="red"
+                  className={unreadNotifications.length === 0 ? "hidden" : ""}
+                >
+                  <BellIcon className="h-5 w-5 text-blue-gray-500" />
+                </Badge>
               </IconButton>
             </MenuHandler>
-            <MenuList className="w-max border-0">
-              <MenuItem className="flex items-center gap-3">
-                <Avatar
-                  src="https://demos.creative-tim.com/material-dashboard/assets/img/team-2.jpg"
-                  alt="item-1"
-                  size="sm"
-                  variant="circular"
-                />
-                <div>
-                  <Typography variant="small" color="blue-gray" className="mb-1 font-normal">
-                    <strong>New message</strong> from Laur
-                  </Typography>
-                  <Typography
-                    variant="small"
-                    color="blue-gray"
-                    className="flex items-center gap-1 text-xs font-normal opacity-60"
-                  >
-                    <ClockIcon className="h-3.5 w-3.5" /> 13 minutes ago
-                  </Typography>
-                </div>
+            <MenuList className="w-max border-0 max-h-[400px] overflow-y-auto">
+              <MenuItem className="flex items-center gap-3 border-b border-blue-gray-50 py-2">
+                <Typography variant="small" color="blue-gray" className="font-bold">
+                  Notifications
+                </Typography>
               </MenuItem>
-              <MenuItem className="flex items-center gap-4">
+
+              {notifications.length === 0 ? (
+                <MenuItem>
+                  <Typography variant="small" color="blue-gray" className="font-normal">
+                    No notifications
+                  </Typography>
+                </MenuItem>
+              ) : (
+                notifications.map((notification) => (
+                  <MenuItem
+                    key={notification.id}
+                    className={`flex items-center gap-4 py-2 pl-2 pr-8 ${!notification.read ? "bg-blue-50" : ""}`}
+                  >
+                    <div
+                      className={`grid h-9 w-9 place-items-center rounded-full ${notification.read ? "bg-blue-gray-50" : "bg-blue-50"}`}
+                    >
+                      {notification.icon || <BellIcon className="h-4 w-4 text-blue-gray-500" />}
+                    </div>
+                    <div>
+                      <Typography variant="small" color="blue-gray" className="mb-1 font-normal">
+                        {notification.message}
+                      </Typography>
+                      <Typography
+                        variant="small"
+                        color="blue-gray"
+                        className="flex items-center gap-1 text-xs font-normal opacity-60"
+                      >
+                        <ClockIcon className="h-3.5 w-3.5" /> {new Date(notification.timestamp).toLocaleString()}
+                      </Typography>
+                    </div>
+                  </MenuItem>
+                ))
+              )}
+            </MenuList>
+          </Menu>
+
+          <Menu>
+            <MenuHandler>
+              <Button
+                variant="text"
+                color="blue-gray"
+                className="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2"
+              >
                 <Avatar
-                  src="https://demos.creative-tim.com/material-dashboard/assets/img/small-logos/logo-spotify.svg"
-                  alt="item-1"
-                  size="sm"
                   variant="circular"
+                  size="sm"
+                  alt="User"
+                  className="border border-blue-500 p-0.5"
+                  src={user?.photoURL || "https://ui-avatars.com/api/?name=" + (user?.displayName || user?.email)}
                 />
-                <div>
-                  <Typography variant="small" color="blue-gray" className="mb-1 font-normal">
-                    <strong>New album</strong> by Travis Scott
-                  </Typography>
-                  <Typography
-                    variant="small"
-                    color="blue-gray"
-                    className="flex items-center gap-1 text-xs font-normal opacity-60"
-                  >
-                    <ClockIcon className="h-3.5 w-3.5" /> 1 day ago
-                  </Typography>
-                </div>
+                <Typography variant="small" className="normal-case font-normal hidden lg:block">
+                  {user?.displayName || user?.email?.split("@")[0]}
+                </Typography>
+              </Button>
+            </MenuHandler>
+            <MenuList>
+              <MenuItem className="flex items-center gap-2">
+                <UserCircleIcon className="h-4 w-4 text-blue-gray-500" />
+                <Typography variant="small" className="font-normal">
+                  My Profile
+                </Typography>
               </MenuItem>
-              <MenuItem className="flex items-center gap-4">
-                <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-tr from-blue-gray-800 to-blue-gray-900">
-                  <CreditCardIcon className="h-4 w-4 text-white" />
-                </div>
-                <div>
-                  <Typography variant="small" color="blue-gray" className="mb-1 font-normal">
-                    Payment successfully completed
-                  </Typography>
-                  <Typography
-                    variant="small"
-                    color="blue-gray"
-                    className="flex items-center gap-1 text-xs font-normal opacity-60"
-                  >
-                    <ClockIcon className="h-3.5 w-3.5" /> 2 days ago
-                  </Typography>
-                </div>
+              <MenuItem className="flex items-center gap-2" onClick={logoutHandler}>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="w-4 h-4 text-blue-gray-500"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+                  />
+                </svg>
+                <Typography variant="small" className="font-normal">
+                  Sign Out
+                </Typography>
               </MenuItem>
             </MenuList>
           </Menu>
-          <IconButton variant="text" color="blue-gray" onClick={() => setOpenConfigurator(dispatch, true)}>
-            <Cog6ToothIcon className="h-5 w-5 text-blue-gray-500" />
-          </IconButton>
         </div>
       </div>
     </Navbar>

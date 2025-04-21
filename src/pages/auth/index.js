@@ -1,3 +1,3 @@
-export * from "./sign-in"
-export * from "./sign-up"
-export * from "./forgot-password"
+export { SignIn } from "./sign-in"
+export { SignUp } from "./sign-up"
+export { ForgotPassword } from "./forgot-password"

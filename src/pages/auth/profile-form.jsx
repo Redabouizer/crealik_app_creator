@@ -6,7 +6,7 @@ import Swal from "sweetalert2"
 import withReactContent from "sweetalert2-react-content"
 import { Input, Button, Typography, Card, CardBody, CardFooter } from "@material-tailwind/react"
 import { updateUserProfile } from "../../firebase/auth"
-import { getUserData } from "../../firebase/firestore"
+import { getUserData } from "../../services/firebase-service"
 import { auth } from "../../firebase/config"
 
 export default function ProfileForm({ isNewUser = false, onComplete }) {
