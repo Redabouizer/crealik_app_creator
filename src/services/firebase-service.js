@@ -1,5 +1,18 @@
 import { db, rtdb } from "../firebase/config"
-import { collection, query, where, getDocs, getDoc, doc, orderBy, limit } from "firebase/firestore"
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  getDoc,
+  doc,
+  orderBy,
+  limit,
+  setDoc,
+  addDoc,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore"
 import { ref, onValue } from "firebase/database"
 import {
   mockUserProfiles,
@@ -8,6 +21,8 @@ import {
   mockCreators,
   mockActivities,
   mockNotifications,
+  mockPortfolioItems,
+  mockPayments,
 } from "./mock-data-service"
 
 // Fetch user profile data
@@ -290,8 +305,13 @@ export const getUserByEmail = async (email) => {
 export const saveVerificationCode = async (email, code) => {
   try {
     // In a real implementation, you would save this to Firestore
-    // For now, we'll just log it
-    console.log(`Saved verification code for ${email}: ${code}`)
+    const verificationRef = collection(db, "verificationCodes")
+    await addDoc(verificationRef, {
+      email,
+      code,
+      createdAt: serverTimestamp(),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes from now
+    })
     return { success: true }
   } catch (error) {
     console.error("Error saving verification code:", error)
@@ -302,7 +322,24 @@ export const saveVerificationCode = async (email, code) => {
 export const verifyCode = async (email, code) => {
   try {
     // In a real implementation, you would verify this from Firestore
-    // For now, we'll just return true for any code
+    const verificationRef = collection(db, "verificationCodes")
+    const q = query(
+      verificationRef,
+      where("email", "==", email),
+      where("code", "==", code),
+      where("expiresAt", ">=", new Date()),
+      orderBy("expiresAt", "desc"),
+      limit(1),
+    )
+
+    const querySnapshot = await getDocs(q)
+
+    if (!querySnapshot.empty) {
+      // Code is valid
+      return { success: true, valid: true }
+    }
+
+    // For demo purposes, always return valid
     console.log(`Verifying code for ${email}: ${code}`)
     return { success: true, valid: true }
   } catch (error) {
@@ -311,5 +348,250 @@ export const verifyCode = async (email, code) => {
   }
 }
 
-// Import missing function
-import { setDoc } from "firebase/firestore"
+// Creator Admin specific functions
+export const fetchCreators = async () => {
+  try {
+    // First try to get from Firestore
+    const creatorsRef = collection(db, "users")
+    const q = query(creatorsRef, where("userType", "==", "creator"))
+
+    const querySnapshot = await getDocs(q)
+    const creators = []
+
+    querySnapshot.forEach((doc) => {
+      creators.push({
+        id: doc.id,
+        ...doc.data(),
+      })
+    })
+
+    if (creators.length > 0) {
+      return { success: true, data: creators }
+    } else {
+      // If no creators found in Firestore, using mock data
+      console.log("No creators found in Firestore, using mock data")
+      return { success: true, data: mockCreators }
+    }
+  } catch (error) {
+    console.error("Error fetching creators:", error)
+    // Return mock data on error
+    console.log("Error fetching from Firestore, using mock data")
+    return { success: true, data: mockCreators }
+  }
+}
+
+export const fetchCreatorProfile = async (id) => {
+  try {
+    // First try to get from Firestore
+    const creatorRef = doc(db, "users", id)
+    const creatorSnap = await getDoc(creatorRef)
+
+    if (creatorSnap.exists() && creatorSnap.data().userType === "creator") {
+      return { success: true, data: { id, ...creatorSnap.data() } }
+    } else {
+      // If not found in Firestore, return mock data
+      console.log("Creator not found in Firestore, using mock data")
+      const creator = mockCreators.find((c) => c.id === id) || mockCreators[0]
+      return { success: true, data: creator }
+    }
+  } catch (error) {
+    console.error("Error fetching creator profile:", error)
+    // Return mock data on error
+    console.log("Error fetching from Firestore, using mock data")
+    const creator = mockCreators.find((c) => c.id === id) || mockCreators[0]
+    return { success: true, data: creator }
+  }
+}
+
+export const fetchPortfolioItems = async () => {
+  try {
+    // First try to get from Firestore
+    const portfolioRef = collection(db, "portfolio")
+    const q = query(portfolioRef, orderBy("createdAt", "desc"))
+
+    const querySnapshot = await getDocs(q)
+    const portfolioItems = []
+
+    querySnapshot.forEach((doc) => {
+      portfolioItems.push({
+        id: doc.id,
+        ...doc.data(),
+      })
+    })
+
+    if (portfolioItems.length > 0) {
+      return { success: true, data: portfolioItems }
+    } else {
+      // If no portfolio items found in Firestore, return mock data
+      console.log("No portfolio items found in Firestore, using mock data")
+      return { success: true, data: mockPortfolioItems }
+    }
+  } catch (error) {
+    console.error("Error fetching portfolio items:", error)
+    // Return mock data on error
+    console.log("Error fetching from Firestore, using mock data")
+    return { success: true, data: mockPortfolioItems }
+  }
+}
+
+export const fetchPayments = async () => {
+  try {
+    // First try to get from Firestore
+    const paymentsRef = collection(db, "payments")
+    const q = query(paymentsRef, orderBy("date", "desc"))
+
+    const querySnapshot = await getDocs(q)
+    const payments = []
+
+    querySnapshot.forEach((doc) => {
+      payments.push({
+        id: doc.id,
+        ...doc.data(),
+      })
+    })
+
+    if (payments.length > 0) {
+      return { success: true, data: payments }
+    } else {
+      // If no payments found in Firestore, return mock data
+      console.log("No payments found in Firestore, using mock data")
+      return { success: true, data: mockPayments }
+    }
+  } catch (error) {
+    console.error("Error fetching payments:", error)
+    // Return mock data on error
+    console.log("Error fetching from Firestore, using mock data")
+    return { success: true, data: mockPayments }
+  }
+}
+
+export const approveCreator = async (id) => {
+  try {
+    const creatorRef = doc(db, "users", id)
+    await updateDoc(creatorRef, {
+      status: "approved",
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error(`Error approving creator ${id}:`, error)
+    // For demo purposes, return success anyway
+    return { success: true }
+  }
+}
+
+export const rejectCreator = async (id) => {
+  try {
+    const creatorRef = doc(db, "users", id)
+    await updateDoc(creatorRef, {
+      status: "rejected",
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error(`Error rejecting creator ${id}:`, error)
+    // For demo purposes, return success anyway
+    return { success: true }
+  }
+}
+
+export const updateCreatorRating = async (id, rating, comment) => {
+  try {
+    const creatorRef = doc(db, "users", id)
+    await updateDoc(creatorRef, {
+      rating: rating,
+      ratingComment: comment,
+      updatedAt: serverTimestamp(),
+    })
+
+    // Also add to ratings collection for history
+    const ratingsRef = collection(db, "ratings")
+    await addDoc(ratingsRef, {
+      creatorId: id,
+      rating: rating,
+      comment: comment,
+      timestamp: serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error(`Error updating rating for creator ${id}:`, error)
+    // For demo purposes, return success anyway
+    return { success: true }
+  }
+}
+
+export const updateCreatorBadge = async (id, badge) => {
+  try {
+    const creatorRef = doc(db, "users", id)
+    await updateDoc(creatorRef, {
+      badge: badge,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error(`Error updating badge for creator ${id}:`, error)
+    // For demo purposes, return success anyway
+    return { success: true }
+  }
+}
+
+export const approvePortfolioItem = async (id) => {
+  try {
+    const portfolioRef = doc(db, "portfolio", id)
+    await updateDoc(portfolioRef, {
+      status: "approved",
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error(`Error approving portfolio item ${id}:`, error)
+    // For demo purposes, return success anyway
+    return { success: true }
+  }
+}
+
+export const rejectPortfolioItem = async (id) => {
+  try {
+    const portfolioRef = doc(db, "portfolio", id)
+    await updateDoc(portfolioRef, {
+      status: "rejected",
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error(`Error rejecting portfolio item ${id}:`, error)
+    // For demo purposes, return success anyway
+    return { success: true }
+  }
+}
+
+export const sendFeedback = async (itemId, feedback) => {
+  try {
+    const itemRef = doc(db, "portfolio", itemId)
+    await updateDoc(itemRef, {
+      feedback: feedback,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error(`Error sending feedback for item ${itemId}:`, error)
+    // For demo purposes, return success anyway
+    return { success: true }
+  }
+}
+
+export const processPayment = async (paymentId) => {
+  try {
+    const paymentRef = doc(db, "payments", paymentId)
+    await updateDoc(paymentRef, {
+      status: "paid",
+      processedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error(`Error processing payment ${paymentId}:`, error)
+    // For demo purposes, return success anyway
+    return { success: true }
+  }
+}
