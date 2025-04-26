@@ -7,7 +7,7 @@ function App() {
         <Route path="/auth/*" element={<Auth />} />
         <Route path="*" element={<Navigate to="/dashboard/home" replace />} />
       </Routes>
-  );
+  );   
 }
 
 export default App;

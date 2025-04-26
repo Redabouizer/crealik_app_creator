@@ -17,7 +17,7 @@ import { SignIn, SignUp, ForgotPassword} from "@/pages/auth";
 
 
 // Import creator admin pages
-import { CreatorAdmin } from "@/pages/creator-admin"
+import { CreatorAdmin } from "@/pages/creator-admin/dashboard"
 import { CreatorList } from "@/pages/creator-admin/creator-list"
 import { CreatorProfile } from "@/pages/creator-admin/creator-profile"
 import { PortfolioReview } from "@/pages/creator-admin/portfolio-review"
@@ -47,12 +47,6 @@ const routes = [
         path: "/profile",
         element: <Profile />,
       },
-    ],
-  },
-  {
-    layout: "dashboard",
-    title: "Platform",
-    pages: [
       {
         icon: <DocumentTextIcon {...icon} />,
         name: "missions",
@@ -64,7 +58,6 @@ const routes = [
         name: "creators",
         path: "/creators",
         element: <Creators />,
-        userTypes: ["brand"], // Only show for brands
       },
       {
         icon: <ChatBubbleLeftRightIcon {...icon} />,
